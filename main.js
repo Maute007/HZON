@@ -1,12 +1,14 @@
 class HorizonApp {
     constructor() {
         this.currentPage = 'home';
+        this.currentSection = null;
+        this.isLoading = false;
         this.components = {
             // Componentes principais
             navbar: 'components/navbar.html',
             footer: 'components/footer.html',
             
-            // Páginas completas
+            // Paginas completas
             services: 'components/cabecalho-servicos.html',
             about: 'sobre-completo.html',
 
@@ -88,26 +90,272 @@ class HorizonApp {
 
     async init() {
         try {
+            // Criar loading overlay se não existir
+            this.createLoadingOverlay();
+            
+            // NÃO mostrar loading no início - removido: this.showLoading('Carregando aplicação...');
+            
             // Carregar componentes essenciais
             await this.loadComponent('navbar', 'navbar-container');
             await this.loadComponent('footer', 'footer-container');
             
-            // Carregar página inicial
-            await this.loadPage('home');
+            // Verificar URL atual e carregar página correspondente (SEM loading)
+            await this.loadPageFromURL();
             
             // Configurar navegação
             this.setupNavigation();
             
-            // Configurar efeitos da navbar
-            this.setupNavbarEffects();
+            // Configurar efeitos da navbar (SEMPRE FIXO)
+            this.setupFixedNavbar();
             
-            // Esconder loading screen
+            // Configurar gerenciamento de URL
+            this.setupURLManagement();
+            
+            // Esconder loading screen inicial
             this.hideLoadingScreen();
+            
+            // NÃO esconder loading overlay pois não foi mostrado - removido: this.hideLoading();
             
         } catch (error) {
             console.error('Erro ao inicializar a aplicação:', error);
             this.showError('Erro ao carregar a aplicação. Tente atualizar a página.');
         }
+    }
+
+    // ✅ NOVO: Criar overlay de loading
+    createLoadingOverlay() {
+        if (!document.getElementById('loading-overlay')) {
+            const loadingHTML = `
+                <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                    <div class="loading-content">
+                        <div class="loading-spinner">
+                            <div class="spinner-ring"></div>
+                            <div class="spinner-ring"></div>
+                            <div class="spinner-ring"></div>
+                        </div>
+                        <div class="loading-text">Carregando...</div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', loadingHTML);
+            
+            // Adicionar estilos CSS
+            this.addLoadingStyles();
+        }
+    }
+
+    // ✅ NOVO: Adicionar estilos do loading
+    addLoadingStyles() {
+        if (!document.getElementById('loading-styles')) {
+            const styles = `
+                <style id="loading-styles">
+                :root {
+                    --primary-color: #4a90a4;
+                    --info-color: #17a2b8;
+                }
+                
+                .loading-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+                    backdrop-filter: blur(10px);
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    opacity: 0;
+                    visibility: hidden;
+                    transition: opacity 0.3s ease, visibility 0.3s ease;
+                }
+
+                .loading-overlay.show {
+                    opacity: 1;
+                    visibility: visible;
+                }
+
+                .loading-content {
+                    text-align: center;
+                    padding: 2rem;
+                }
+
+                .loading-spinner {
+                    position: relative;
+                    display: inline-block;
+                    width: 60px;
+                    height: 60px;
+                    margin-bottom: 1rem;
+                }
+
+                .spinner-ring {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    border: 3px solid transparent;
+                    border-top: 3px solid rgba(255, 255, 255, 0.8);
+                    border-radius: 50%;
+                    animation: spin 1.2s linear infinite;
+                }
+
+                .spinner-ring:nth-child(2) {
+                    animation-delay: -0.4s;
+                    border-top-color: rgba(255, 255, 255, 0.6);
+                }
+
+                .spinner-ring:nth-child(3) {
+                    animation-delay: -0.8s;
+                    border-top-color: rgba(255, 255, 255, 0.4);
+                }
+
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+
+                .loading-text {
+                    font-size: 1.1rem;
+                    font-weight: 500;
+                    color: white;
+                    animation: pulse 1.5s ease-in-out infinite;
+                }
+
+                @keyframes pulse {
+                    0%, 100% { opacity: 0.7; }
+                    50% { opacity: 1; }
+                }
+
+                /* Navbar sempre fixo */
+                .navbar-custom {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    width: 100% !important;
+                    z-index: 1050 !important;
+                    transform: none !important;
+                    transition: none !important;
+                }
+                </style>
+            `;
+            
+            document.head.insertAdjacentHTML('beforeend', styles);
+        }
+    }
+
+    // ✅ NOVO: Mostrar loading
+    showLoading(message = 'Carregando...') {
+        if (this.isLoading) return; // Evitar múltiplas chamadas
+        
+        this.isLoading = true;
+        const overlay = document.getElementById('loading-overlay');
+        const text = overlay?.querySelector('.loading-text');
+        
+        if (overlay) {
+            if (text) text.textContent = message;
+            overlay.style.display = 'flex';
+            setTimeout(() => overlay.classList.add('show'), 10);
+        }
+    }
+
+    // ✅ NOVO: Esconder loading
+    hideLoading() {
+        this.isLoading = false;
+        const overlay = document.getElementById('loading-overlay');
+        
+        if (overlay) {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 300);
+        }
+    }
+
+    // ✅ NOVO: Setup navbar sempre fixo
+    setupFixedNavbar() {
+        const navbar = document.querySelector('.navbar');
+        if (navbar) {
+            // Forçar navbar sempre fixo
+            navbar.style.position = 'fixed';
+            navbar.style.top = '0';
+            navbar.style.left = '0';
+            navbar.style.right = '0';
+            navbar.style.width = '100%';
+            navbar.style.zIndex = '1050';
+            navbar.style.transform = 'none';
+            navbar.style.transition = 'none';
+            
+            // Remover qualquer listener de scroll que esconda a navbar
+            window.addEventListener('scroll', () => {
+                if (navbar) {
+                    navbar.style.transform = 'none';
+                    navbar.style.position = 'fixed';
+                    
+                    // Apenas adicionar/remover classe scrolled para efeitos visuais
+                    if (window.pageYOffset > 100) {
+                        navbar.classList.add('navbar-scrolled');
+                    } else {
+                        navbar.classList.remove('navbar-scrolled');
+                    }
+                }
+            });
+        }
+    }
+
+    // ✅ NOVO: Gerenciamento de URL
+    setupURLManagement() {
+        // Listener para mudanças na URL (botão voltar/avançar)
+        window.addEventListener('popstate', (event) => {
+            const state = event.state;
+            if (state && state.page) {
+                if (state.section) {
+                    this.loadPageAndScrollToSection(state.page, state.section, false, true); // COM loading
+                } else {
+                    this.loadPage(state.page, false, true); // COM loading
+                }
+            } else {
+                this.loadPageFromURL(false, true); // COM loading
+            }
+        });
+    }
+
+    // ✅ ATUALIZADO: Carregar página baseada na URL atual (SEM loading no início)
+    async loadPageFromURL(updateHistory = false, showLoading = false) {
+        const hash = window.location.hash.slice(1); // Remove o #
+        const [page, section] = hash.split('/');
+        
+        if (page && this.isValidPage(page)) {
+            if (section) {
+                await this.loadPageAndScrollToSection(page, section, updateHistory, showLoading);
+            } else {
+                await this.loadPage(page, updateHistory, showLoading);
+            }
+        } else {
+            await this.loadPage('home', updateHistory, showLoading);
+        }
+    }
+
+    // ✅ NOVO: Verificar se página é válida
+    isValidPage(pageName) {
+        return this.components[pageName] || this.modularPages[pageName];
+    }
+
+    // ✅ NOVO: Atualizar URL
+    updateURL(page, section = null) {
+        let hash = `#${page}`;
+        if (section) {
+            hash += `/${section}`;
+        }
+        
+        const state = { page, section };
+        history.pushState(state, '', hash);
+        
+        this.currentPage = page;
+        this.currentSection = section;
     }
 
     async loadComponent(componentName, containerId) {
@@ -134,38 +382,53 @@ class HorizonApp {
         }
     }
 
-    async loadPage(pageName) {
+    // ✅ ATUALIZADO: LoadPage com loading opcional
+    async loadPage(pageName, updateHistory = true, showLoadingOverlay = true) {
         try {
+            // Mostrar loading apenas se solicitado (não no carregamento inicial)
+            if (showLoadingOverlay) {
+                this.showLoading(`Carregando ${pageName}...`);
+            }
+            
             const mainContainer = document.getElementById('main-content');
             
             if (mainContainer) {
-                // Fade out
-                mainContainer.style.opacity = '0';
+                // Verificar se é uma página modular
+                if (this.modularPages[pageName]) {
+                    await this.loadModularPage(pageName);
+                } else {
+                    await this.loadSinglePage(pageName);
+                }
                 
-                setTimeout(async () => {
-                    // Verificar se é uma página modular
-                    if (this.modularPages[pageName]) {
-                        await this.loadModularPage(pageName);
-                    } else {
-                        await this.loadSinglePage(pageName);
-                    }
-                    
-                    this.currentPage = pageName;
-                    
-                    // Fade in
-                    mainContainer.style.opacity = '1';
-                    mainContainer.classList.add('loaded');
-                    
-                    // Aplicar animações
-                    this.applyAnimations(mainContainer);
-                    
-                    // Atualizar navbar ativa
-                    this.updateActiveNavLink(pageName);
-                    
-                }, 150);
+                // Atualizar URL se necessário
+                if (updateHistory) {
+                    this.updateURL(pageName);
+                }
+                
+                mainContainer.classList.add('loaded');
+                
+                // Aplicar animações
+                this.applyAnimations(mainContainer);
+                
+                // Atualizar navbar ativa
+                this.updateActiveNavLink(pageName);
+                
+                // Scroll to top apenas se não vier de uma navegação com seção
+                if (!this.currentSection) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
             }
+            
+            // Esconder loading apenas se foi mostrado
+            if (showLoadingOverlay) {
+                this.hideLoading();
+            }
+            
         } catch (error) {
             console.error(`Erro ao carregar página ${pageName}:`, error);
+            if (showLoadingOverlay) {
+                this.hideLoading();
+            }
             this.showError(`Erro ao carregar a página ${pageName}`);
         }
     }
@@ -244,11 +507,21 @@ class HorizonApp {
         }
     }
 
-    // ✅ ADICIONADO: Método para carregar página e rolar para seção específica
-    async loadPageAndScrollToSection(pageName, sectionId) {
+    // ✅ ATUALIZADO: Com loading apenas quando navegando
+    async loadPageAndScrollToSection(pageName, sectionId, updateHistory = true, showLoadingOverlay = true) {
         try {
+            // Mostrar loading apenas se solicitado (não no carregamento inicial)
+            if (showLoadingOverlay) {
+                this.showLoading(`Carregando ${pageName}...`);
+            }
+            
             // Primeiro carrega a página
-            await this.loadPage(pageName);
+            await this.loadPage(pageName, false, false); // Não mostrar loading duplicado
+            
+            // Atualizar URL com seção
+            if (updateHistory) {
+                this.updateURL(pageName, sectionId);
+            }
             
             // Espera um pouco para a página carregar completamente
             setTimeout(() => {
@@ -272,10 +545,18 @@ class HorizonApp {
                 } else {
                     console.warn(`Seção "${sectionId}" não encontrada na página "${pageName}"`);
                 }
-            }, 700); // Espera 700ms para garantir que todas as seções carregaram
+                
+                // Esconder loading apenas se foi mostrado
+                if (showLoadingOverlay) {
+                    this.hideLoading();
+                }
+            }, 700);
             
         } catch (error) {
             console.error(`Erro ao carregar página ${pageName} e rolar para seção ${sectionId}:`, error);
+            if (showLoadingOverlay) {
+                this.hideLoading();
+            }
             this.showError(`Erro ao navegar para ${pageName}`);
         }
     }
@@ -287,15 +568,13 @@ class HorizonApp {
             if (link) {
                 e.preventDefault();
                 const pageName = link.getAttribute('data-page');
-                const serviceSection = link.getAttribute('data-service'); // ✅ ADICIONADO
+                const serviceSection = link.getAttribute('data-service');
                 
-                // ✅ ADICIONADO: Se tem data-service, vai para página e depois para seção
+                // Se tem data-service, vai para página e depois para seção
                 if (serviceSection) {
                     this.loadPageAndScrollToSection(pageName, serviceSection);
                 } else {
                     this.loadPage(pageName);
-                    // Scroll to top
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
                 
                 // Fechar menu mobile se estiver aberto
@@ -318,43 +597,6 @@ class HorizonApp {
         });
     }
 
-    setupNavbarEffects() {
-        // Efeito de scroll na navbar
-        let lastScrollTop = 0;
-        let scrollTimer = null;
-        
-        window.addEventListener('scroll', () => {
-            const navbar = document.querySelector('.navbar');
-            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            
-            if (navbar) {
-                // Adicionar classe scrolled
-                if (scrollTop > 100) {
-                    navbar.classList.add('navbar-scrolled');
-                } else {
-                    navbar.classList.remove('navbar-scrolled');
-                }
-                // Auto-hide navbar on scroll down (opcional)
-                if (scrollTop > lastScrollTop && scrollTop > 500) {
-                    navbar.style.transform = 'translateY(-100%)';
-                } else {
-                    navbar.style.transform = 'translateY(0)';
-                }
-                
-                // Debounce scroll events
-                if (scrollTimer) {
-                    clearTimeout(scrollTimer);
-                }
-                
-                scrollTimer = setTimeout(() => {
-                    // Ações após parar de scroll
-                    navbar.style.transition = 'transform 0.3s ease';
-                }, 150);
-            }
-            
-            lastScrollTop = scrollTop;
-        });
-    }
     updateActiveNavLink(pageName) {
         // Remover classe active de todos os links
         document.querySelectorAll('.navbar-nav .nav-link').forEach(link => {
@@ -367,6 +609,7 @@ class HorizonApp {
             activeLink.classList.add('active');
         }
     }
+
     applyAnimations(container) {
         // Aplicar animações aos elementos
         const elements = container.querySelectorAll('[data-animate]');
@@ -382,6 +625,7 @@ class HorizonApp {
             }, parseInt(delay));
         });
     }
+
     hideLoadingScreen() {
         const loadingScreen = document.getElementById('loading-screen');
         if (loadingScreen) {
@@ -393,9 +637,9 @@ class HorizonApp {
             }, 1000);
         }
     }
-    // Mtodo para mostrar erros
+
+    // Método para mostrar erros
     showError(message) {
-        // Criei toast de erro usando Bootstrap/nao vou saber explicar
         const toastHtml = `
             <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
                 <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
@@ -460,7 +704,8 @@ class HorizonApp {
             container.classList.add('loaded');
         }
     }
-    // Mtodo publico para navegacao programatica
+
+    // Método público para navegação programática
     navigateTo(pageName) {
         if (this.components[pageName] || this.modularPages[pageName]) {
             this.loadPage(pageName);
@@ -469,16 +714,18 @@ class HorizonApp {
             this.showError(`Página "${pageName}" não encontrada`);
         }
     }
-    // Mtodo para obter pagina atual
+
+    // Método para obter página atual
     getCurrentPage() {
         return this.currentPage;
     }
-    // Metodo para recarregar página atual
+
+    // Método para recarregar página atual
     reloadCurrentPage() {
         this.loadPage(this.currentPage);
     }
 
-    // Mitodo para adicionar nova seção dinamicamente
+    // Método para adicionar nova seção dinamicamente
     addSectionToPage(pageName, sectionName, sectionPath) {
         if (!this.modularPages[pageName]) {
             this.modularPages[pageName] = [];
@@ -488,17 +735,19 @@ class HorizonApp {
         this.components[sectionName] = sectionPath;
     }
 
-    // parte de debug
+    // Parte de debug
     getDebugInfo() {
         return {
             currentPage: this.currentPage,
+            currentSection: this.currentSection,
+            isLoading: this.isLoading,
             components: this.components,
             modularPages: this.modularPages
         };
     }
 }
 
-// Inicializar aplicacaoo quando DOM estiver carregado
+// Inicializar aplicação quando DOM estiver carregado
 document.addEventListener('DOMContentLoaded', () => {
     window.horizonApp = new HorizonApp();
     
@@ -508,5 +757,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Exportar para uso global essa parte n sei se funciona
+// Exportar para uso global
 window.HorizonApp = HorizonApp;
